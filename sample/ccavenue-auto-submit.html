@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CCAvenue test checkout</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Flow:
+        1) Enter amount and click Pay — calls POST /create-order on your backend.
+        2) Backend returns encRequest, access_code, ccavenue_url.
+        3) Hidden form is filled and auto-submitted to CCAvenue.
+      Open from the API server (recommended): http://localhost:3000/ccavenue-auto-submit.html
+      Do not open as file:// — browsers block that. Optional: set CORS_ORIGIN on the API for other dev origins.
+    -->
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 28rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+      }
+      input[type="number"] {
+        width: 100%;
+        padding: 0.5rem 0.65rem;
+        font-size: 1rem;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 1rem;
+        padding: 0.55rem 1.25rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.7;
+      }
+      #status {
+        margin-top: 1rem;
+        white-space: pre-wrap;
+        font-size: 0.9rem;
+      }
+      .err {
+        color: #b00020;
+      }
+      .ok {
+        color: #0d6d0d;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CCAvenue test</h1>
+    <p>
+      Enter amount (INR) and click Pay. Use this page at
+      <code>/ccavenue-auto-submit.html</code> on your API host so requests stay same-origin.
+    </p>
+
+    <form id="test_form">
+      <label for="amount">Amount (INR)</label>
+      <input id="amount" type="number" min="0.01" step="0.01" value="1.00" required />
+      <button type="submit" id="pay_btn">Pay</button>
+    </form>
+
+    <div id="status" role="status"></div>
+
+    <!-- CCAvenue receives this POST (hidden fields filled after /create-order) -->
+    <form
+      id="ccav_form"
+      method="post"
+      action="https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction"
+      style="display: none"
+    >
+      <input type="hidden" name="merchant_id" id="merchant_id" value="" />
+      <input type="hidden" name="access_code" id="access_code" value="" />
+      <input type="hidden" name="encRequest" id="encRequest" value="" />
+    </form>
+
+    <script>
+      /** Same host as this page when served from Express; fallback for file:// or other hosts. */
+      const API_BASE =
+        window.location.protocol === "file:"
+          ? "http://localhost:3000"
+          : window.location.origin;
+
+      const statusEl = document.getElementById("status");
+      const payBtn = document.getElementById("pay_btn");
+
+      document.getElementById("test_form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        statusEl.textContent = "";
+        statusEl.className = "";
+
+        const amount = document.getElementById("amount").value;
+        if (!amount || Number(amount) <= 0) {
+          statusEl.className = "err";
+          statusEl.textContent = "Enter a valid amount.";
+          return;
+        }
+
+        const payload = {
+          amount: String(amount),
+          currency: "INR",
+          customer_name: "Test User",
+          email: "test@example.com",
+          phone: "9999999999",
+        };
+
+        payBtn.disabled = true;
+        statusEl.className = "ok";
+        statusEl.textContent = "Creating order…";
+
+        try {
+          const res = await fetch(API_BASE + "/create-order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const text = await res.text();
+          if (!res.ok) {
+            statusEl.className = "err";
+            statusEl.textContent = "create-order failed (" + res.status + "):\n" + text;
+            return;
+          }
+          const data = JSON.parse(text);
+          document.getElementById("ccav_form").action = data.ccavenue_url;
+          document.getElementById("merchant_id").value = data.merchant_id;
+          document.getElementById("access_code").value = data.access_code;
+          document.getElementById("encRequest").value = data.encRequest;
+          statusEl.textContent = "Redirecting to CCAvenue…";
+          document.getElementById("ccav_form").submit();
+        } catch (err) {
+          statusEl.className = "err";
+          statusEl.textContent =
+            String(err.message || err) +
+            "\n\nTip: open http://localhost:3000/ccavenue-auto-submit.html (with `npm start`) instead of double-clicking this file.";
+        } finally {
+          payBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "visionkart-ccavenue-backend",
+  "version": "1.0.0",
+  "description": "Express backend for CCAvenue redirect-based payments",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  }
+}
