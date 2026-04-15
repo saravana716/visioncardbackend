@@ -49,6 +49,16 @@ function getMerchantConfig() {
 }
 
 /**
+ * CCAvenue is extremely sensitive to special characters in address and name fields.
+ * This helper strips everything except alphanumeric characters and spaces.
+ */
+function sanitize(val) {
+  if (!val) return "";
+  // Keep only alphanumeric and spaces
+  return String(val).replace(/[^a-zA-Z0-9\s]/g, " ").replace(/\s\s+/g, " ").trim();
+}
+
+/**
  * Basic validation for create-order payload (keep messages safe for API clients).
  */
 function validateCreateOrderBody(body) {
@@ -88,22 +98,22 @@ function validateCreateOrderBody(body) {
  */
 function buildBillingDelivery(overrides, billingName, billingEmail, billingTel) {
   const o = overrides && typeof overrides === "object" ? overrides : {};
-  const name = String(billingName || "").trim().slice(0, 60);
+  const name = sanitize(billingName || "").slice(0, 60);
   const email = String(billingEmail || "").trim().slice(0, 70);
   const tel = String(billingTel || "").replace(/\D/g, "").slice(0, 20) || "9999999999";
 
-  const billing_address = String(o.billing_address ?? "Not provided").trim().slice(0, 150);
-  const billing_city = String(o.billing_city ?? "Not provided").trim().slice(0, 30);
-  const billing_state = String(o.billing_state ?? "Not provided").trim().slice(0, 30);
-  const billing_zip = String(o.billing_zip ?? "000000").trim().slice(0, 15);
-  const billing_country = String(o.billing_country ?? "India").trim().slice(0, 50);
+  const billing_address = sanitize(o.billing_address ?? "Not provided").slice(0, 150);
+  const billing_city = sanitize(o.billing_city ?? "Not provided").slice(0, 30);
+  const billing_state = sanitize(o.billing_state ?? "Not provided").slice(0, 30);
+  const billing_zip = String(o.billing_zip ?? "000000").replace(/\D/g, "").slice(0, 15);
+  const billing_country = sanitize(o.billing_country ?? "India").slice(0, 50);
 
-  const delivery_name = String(o.delivery_name ?? name).trim().slice(0, 60);
-  const delivery_address = String(o.delivery_address ?? billing_address).trim().slice(0, 150);
-  const delivery_city = String(o.delivery_city ?? billing_city).trim().slice(0, 30);
-  const delivery_state = String(o.delivery_state ?? billing_state).trim().slice(0, 30);
-  const delivery_zip = String(o.delivery_zip ?? billing_zip).trim().slice(0, 15);
-  const delivery_country = String(o.delivery_country ?? billing_country).trim().slice(0, 50);
+  const delivery_name = sanitize(o.delivery_name ?? name).slice(0, 60);
+  const delivery_address = sanitize(o.delivery_address ?? billing_address).slice(0, 150);
+  const delivery_city = sanitize(o.delivery_city ?? billing_city).slice(0, 30);
+  const delivery_state = sanitize(o.delivery_state ?? billing_state).slice(0, 30);
+  const delivery_zip = String(o.delivery_zip ?? billing_zip).replace(/\D/g, "").slice(0, 15);
+  const delivery_country = sanitize(o.delivery_country ?? billing_country).slice(0, 50);
   const delivery_tel = String(o.delivery_tel ?? tel).replace(/\D/g, "").slice(0, 22);
 
   return {
