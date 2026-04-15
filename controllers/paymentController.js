@@ -5,6 +5,7 @@ const {
   parseKeyValueString,
   buildRequestString,
 } = require("../utils/ccavenue");
+const { db } = require("../utils/firebase");
 
 /** Live non-seamless POST URL. Sandbox merchants must use test host (see CCAVENUE_INIT_URL in .env). */
 const CCAVENUE_INIT_URL_LIVE =
@@ -145,12 +146,12 @@ function createOrder(req, res, next) {
     const { merchantId, accessCode, workingKey, redirectUrl, cancelUrl } =
       getMerchantConfig();
 
-    // Step C — unique order id for reconciliation (store this in your orders table if needed)
-    const orderId = `VK_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+    // Step C — Use Firestore order ID from client, or fallback to generation
+    const orderId = req.body.order_id || `VK_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
 
     // Step D — amount must be a decimal string; currency is uppercased (e.g. INR)
     const amountStr = Number(req.body.amount).toFixed(2);
-    const currency = String(req.body.currency).trim().toUpperCase();
+    const currency = (req.body.currency || 'INR').trim().toUpperCase();
 
     // Step E — merchant fields + full billing/delivery (many accounts reject missing address fields)
     const addr = buildBillingDelivery(
@@ -201,7 +202,7 @@ function createOrder(req, res, next) {
  * Step C — Split the decrypted `k=v&k=v` string into a map.
  * Step D — Return only the fields your React / RN UI needs for receipts and navigation.
  */
-function paymentResponse(req, res, next) {
+async function paymentResponse(req, res, next) {
   try {
     const { workingKey } = getMerchantConfig();
 
@@ -234,12 +235,40 @@ function paymentResponse(req, res, next) {
 
     const order_id = parsed.order_id ?? null;
     const order_status = parsed.order_status ?? null;
+    const tracking_id = parsed.tracking_id ?? null;
     const amount = parsed.amount ?? null;
     const payment_mode = parsed.payment_mode ?? null;
 
-    // Step D — Redirect back to the React frontend with the result
-    const frontendBaseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const statusParam = order_status?.toLowerCase().includes("success") ? "success" : "failed";
+    // Step D — Determine final status for tracking
+    const isSuccess = order_status?.toLowerCase().includes("success");
+    const statusParam = isSuccess ? "success" : "failed";
+    const finalFirestoreStatus = isSuccess ? "Ordered" : "Payment Failed";
+
+    // Step E — Update Firestore synchronously before redirecting the user
+    if (order_id) {
+      try {
+        console.log(`Updating Firestore Order ${order_id} to ${finalFirestoreStatus}...`);
+        await db.collection("orders").doc(order_id).update({
+          status: finalFirestoreStatus,
+          paymentInfo: {
+            gateway: "CCAvenue",
+            trackingId: tracking_id,
+            bankRefNo: parsed.bank_ref_no || null,
+            paymentMode: payment_mode,
+            cardName: parsed.card_name || null,
+            statusMessage: parsed.status_message || null,
+            updatedAt: new Date(),
+          },
+        });
+        console.log("Firestore update complete.");
+      } catch (fsError) {
+        console.error("Firestore sync error in paymentResponse:", fsError.message);
+        // We continue to redirect even if Firestore update fails locally (S2S handles this differently)
+      }
+    }
+
+    // Step F — Redirect back to the React frontend with the result
+    const frontendBaseUrl = process.env.FRONTEND_URL || "https://www.visionkart.online";
     
     return res.redirect(`${frontendBaseUrl}/order-${statusParam}?order_id=${order_id}&status=${order_status}`);
   } catch (e) {
