@@ -132,102 +132,72 @@ async function sendMail(opts) {
 }
 
 /**
- * Generates a professional HTML invoice layout for Vision Kart
+ * Generates a premium Order Confirmation email with a Download link
  */
-function generateInvoiceHTML(order) {
-  const { items, billingAddress, shippingAddress, amounts, id, createdAt } = order;
-  const dateStr = createdAt ? new Date(createdAt.seconds * 1000).toLocaleDateString() : new Date().toLocaleDateString();
-
-  // Defensive checks to stop the "toLocaleString" crash
+function generateOrderConfirmationHTML(order) {
+  const { items, billingAddress, amounts, id, invoiceUrl } = order;
+  
+  // Safe defaults
+  const firstName = billingAddress?.fullName?.split(' ')[0] || "there";
+  const totalAmount = amounts?.total || order.totalAmount || 0;
   const safeItems = items && Array.isArray(items) ? items : [];
-  const safeBilling = billingAddress || { fullName: "Not provided", address: "", city: "", state: "", zip: "", phone: "" };
-  const safeShipping = shippingAddress || safeBilling;
-  const safeAmounts = amounts || { subtotal: 0, discount: 0, tax: 0, total: 0 };
-
-  const itemsHtml = safeItems.map(item => `
-    <tr>
-      <td style="padding: 12px; border-bottom: 1px solid #eee;">
-        <div style="font-weight: bold; color: #333;">${item.name || 'VisionKart Product'} ${item.brand || ''}</div>
-        <div style="font-size: 12px; color: #666;">${item.category || ''}</div>
-      </td>
-      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity || 1}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${(item.price || 0).toLocaleString()}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
-    </tr>
-  `).join('');
+  
+  // Create a simple list of items
+  const itemsText = safeItems.map(item => 
+    `${item.productName || item.name || 'Product'} (x${item.quantity || 1})`
+  ).join(', ');
 
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 20px auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
-        .header { background: #1a1a1a; color: #ffffff; padding: 30px; text-align: center; }
-        .content { padding: 30px; }
-        .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .table th { background: #f8f8f8; padding: 12px; text-align: left; font-size: 14px; text-transform: uppercase; }
-        .totals { margin-left: auto; width: 250px; }
-        .total-row { display: flex; justify-content: space-between; padding: 8px 0; }
-        .grand-total { border-top: 2px solid #1a1a1a; margin-top: 10px; padding-top: 10px; font-weight: bold; font-size: 18px; }
-        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #888; }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #e8f5e9; color: #2e7d32; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f7; }
+        .wrapper { width: 100%; padding: 20px 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .header { background: #1a1a1a; color: #ffffff; padding: 40px 20px; text-align: center; }
+        .content { padding: 40px; text-align: center; }
+        .order-box { background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: left; }
+        .btn { display: inline-block; padding: 16px 32px; background-color: #007bff; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px; transition: background 0.3s; }
+        .footer { padding: 20px; text-align: center; font-size: 13px; color: #888; }
+        .total { font-size: 24px; font-weight: bold; color: #1a1a1a; }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0; letter-spacing: 2px;">VISION KART</h1>
-          <p style="margin: 5px 0 0; opacity: 0.8;">Tax Invoice / Purchase Receipt</p>
-        </div>
-        <div class="content">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-            <div>
-              <div style="font-size: 14px; color: #888;">Order ID</div>
-              <div style="font-weight: bold; font-size: 16px;">#${id}</div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 14px; color: #888;">Date</div>
-              <div style="font-weight: bold;">${dateStr}</div>
-              <div class="badge">PAID</div>
-            </div>
+      <div class="wrapper">
+        <div class="container">
+          <div class="header">
+            <h1 style="margin: 0; font-size: 28px; letter-spacing: 1px;">VISION KART</h1>
           </div>
-          <div style="display: flex; gap: 40px; margin-bottom: 30px;">
-            <div style="flex: 1;">
-              <h4 style="margin: 0 0 10px; color: #888; font-size: 12px; text-transform: uppercase;">Billed To</h4>
-              <div style="font-weight: bold;">${safeBilling.fullName || "Valued Customer"}</div>
-              <div>${safeBilling.address || ""}</div>
-              <div>${safeBilling.city || ""}, ${safeBilling.state || ""} - ${safeBilling.zip || ""}</div>
-              <div>Phone: ${safeBilling.phone || ""}</div>
+          <div class="content">
+            <h2 style="margin: 0 0 10px;">Order Confirmed!</h2>
+            <p style="font-size: 16px; color: #555;">Hi ${firstName}, your order has been received and is being processed. Thank you for shopping with us!</p>
+            
+            <div class="order-box">
+              <div style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Order ID</div>
+              <div style="font-weight: bold; font-size: 18px; margin-bottom: 15px;">#${id}</div>
+              
+              <div style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Items</div>
+              <div style="margin-bottom: 15px;">${itemsText}</div>
+
+              <div style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Total Paid</div>
+              <div class="total">₹${totalAmount.toLocaleString()}</div>
             </div>
-            <div style="flex: 1;">
-              <h4 style="margin: 0 0 10px; color: #888; font-size: 12px; text-transform: uppercase;">Shipped To</h4>
-              <div style="font-weight: bold;">${safeShipping.fullName || (safeBilling.fullName || "Valued Customer")}</div>
-              <div>${safeShipping.address || (safeBilling.address || "")}</div>
-              <div>${safeShipping.city || (safeBilling.city || "")}, ${safeShipping.state || (safeBilling.state || "")} - ${safeShipping.zip || (safeBilling.zip || "")}</div>
-            </div>
+
+            <p style="margin-top: 30px;">Your tax invoice is ready for download.</p>
+            <a href="${invoiceUrl || '#'}" class="btn">Download Tax Invoice (PDF)</a>
+            
+            <p style="font-size: 13px; color: #999; margin-top: 30px;">
+              If the button doesn't work, copy this link into your browser:<br>
+              <span style="color: #007bff; word-break: break-all;">${invoiceUrl || 'Link not available'}</span>
+            </p>
           </div>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th style="text-align: center;">Qty</th>
-                <th style="text-align: right;">Price</th>
-                <th style="text-align: right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>${itemsHtml}</tbody>
-          </table>
-          <div class="totals">
-            <div class="total-row"><span>Subtotal</span><span>₹${(safeAmounts.subtotal || 0).toLocaleString()}</span></div>
-            ${(safeAmounts.discount || 0) > 0 ? `<div class="total-row" style="color: #d32f2f;"><span>Discount</span><span>-₹${safeAmounts.discount.toLocaleString()}</span></div>` : ''}
-            <div class="total-row"><span>GST (Tax)</span><span>₹${(safeAmounts.tax || 0).toLocaleString()}</span></div>
-            <div class="total-row grand-total"><span>Grand Total</span><span>₹${(safeAmounts.total || 0).toLocaleString()}</span></div>
+          <div class="footer">
+            <p>Questions? Contact us at visionkart.onlinestore@gmail.com</p>
+            <p>&copy; ${new Date().getFullYear()} Vision Kart. All rights reserved.</p>
           </div>
-        </div>
-        <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} Vision Kart. All rights reserved.</p>
         </div>
       </div>
     </body>
@@ -243,5 +213,5 @@ module.exports = {
   createSmtpTransport,
   sendMail,
   getDefaultFrom,
-  generateInvoiceHTML
+  generateOrderConfirmationHTML
 };
