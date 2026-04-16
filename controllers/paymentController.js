@@ -25,21 +25,34 @@ function getCcavenueInitUrl() {
  * Read required env vars once per request path so misconfiguration returns a clear error.
  */
 function getMerchantConfig() {
-  const merchantId = process.env.MERCHANT_ID;
-  const accessCode = process.env.ACCESS_CODE;
-  const workingKey = process.env.WORKING_KEY;
+  const mode = String(process.env.CCAVENUE_MODE || "live").toLowerCase();
+  const isTest = mode === "test" || mode === "sandbox";
+
+  // Dynamically select credentials based on mode
+  const merchantId = isTest 
+    ? (process.env.TEST_MERCHANT_ID || process.env.MERCHANT_ID) 
+    : (process.env.LIVE_MERCHANT_ID || process.env.MERCHANT_ID);
+    
+  const accessCode = isTest 
+    ? (process.env.TEST_ACCESS_CODE || process.env.ACCESS_CODE) 
+    : (process.env.LIVE_ACCESS_CODE || process.env.ACCESS_CODE);
+    
+  const workingKey = isTest 
+    ? (process.env.TEST_WORKING_KEY || process.env.WORKING_KEY) 
+    : (process.env.LIVE_WORKING_KEY || process.env.WORKING_KEY);
+
   const redirectUrl = process.env.REDIRECT_URL;
   const cancelUrl = process.env.CANCEL_URL;
 
   const missing = [];
-  if (!merchantId) missing.push("MERCHANT_ID");
-  if (!accessCode) missing.push("ACCESS_CODE");
-  if (!workingKey) missing.push("WORKING_KEY");
+  if (!merchantId) missing.push(isTest ? "TEST_MERCHANT_ID" : "LIVE_MERCHANT_ID");
+  if (!accessCode) missing.push(isTest ? "TEST_ACCESS_CODE" : "LIVE_ACCESS_CODE");
+  if (!workingKey) missing.push(isTest ? "TEST_WORKING_KEY" : "LIVE_WORKING_KEY");
   if (!redirectUrl) missing.push("REDIRECT_URL");
   if (!cancelUrl) missing.push("CANCEL_URL");
 
   if (missing.length) {
-    const err = new Error(`Missing environment variables: ${missing.join(", ")}`);
+    const err = new Error(`Missing environment variables for ${mode} mode: ${missing.join(", ")}`);
     err.statusCode = 500;
     err.code = "CONFIG_ERROR";
     throw err;
