@@ -6,9 +6,10 @@ function errorHandler(err, req, res, _next) {
   const payload = {
     error: err.code || (status === 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR"),
     message: err.message || "Something went wrong",
-    details: err.details || undefined,
-    stack: err.stack, // Temporarily enabled for debugging
   };
+  if (process.env.NODE_ENV !== "production" && err.stack) {
+    payload.stack = err.stack;
+  }
   res.status(status).json(payload);
 }
 
