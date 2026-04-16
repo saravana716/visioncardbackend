@@ -292,6 +292,7 @@ async function paymentResponse(req, res, next) {
             const orderDoc = await db.collection("orders").doc(order_id).get();
             if (orderDoc.exists) {
               const orderData = { id: order_id, ...orderDoc.data() };
+              console.log("DEBUG: Full Order Data from Firestore:", JSON.stringify(orderData, null, 2));
               const { sendMail, generateInvoiceHTML } = require("../utils/mail");
               const html = generateInvoiceHTML(orderData);
               

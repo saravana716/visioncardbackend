@@ -138,15 +138,21 @@ function generateInvoiceHTML(order) {
   const { items, billingAddress, shippingAddress, amounts, id, createdAt } = order;
   const dateStr = createdAt ? new Date(createdAt.seconds * 1000).toLocaleDateString() : new Date().toLocaleDateString();
 
-  const itemsHtml = items.map(item => `
+  // Defensive checks to stop the "toLocaleString" crash
+  const safeItems = items && Array.isArray(items) ? items : [];
+  const safeBilling = billingAddress || { fullName: "Not provided", address: "", city: "", state: "", zip: "", phone: "" };
+  const safeShipping = shippingAddress || safeBilling;
+  const safeAmounts = amounts || { subtotal: 0, discount: 0, tax: 0, total: 0 };
+
+  const itemsHtml = safeItems.map(item => `
     <tr>
       <td style="padding: 12px; border-bottom: 1px solid #eee;">
-        <div style="font-weight: bold; color: #333;">${item.name} ${item.brand || ''}</div>
+        <div style="font-weight: bold; color: #333;">${item.name || 'VisionKart Product'} ${item.brand || ''}</div>
         <div style="font-size: 12px; color: #666;">${item.category || ''}</div>
       </td>
       <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity || 1}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${item.price.toLocaleString()}</td>
-      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${((item.price) * (item.quantity || 1)).toLocaleString()}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${(item.price || 0).toLocaleString()}</td>
+      <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">₹${((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
     </tr>
   `).join('');
 
@@ -190,16 +196,16 @@ function generateInvoiceHTML(order) {
           <div style="display: flex; gap: 40px; margin-bottom: 30px;">
             <div style="flex: 1;">
               <h4 style="margin: 0 0 10px; color: #888; font-size: 12px; text-transform: uppercase;">Billed To</h4>
-              <div style="font-weight: bold;">${billingAddress.fullName}</div>
-              <div>${billingAddress.address}</div>
-              <div>${billingAddress.city}, ${billingAddress.state} - ${billingAddress.zip}</div>
-              <div>Phone: ${billingAddress.phone}</div>
+              <div style="font-weight: bold;">${safeBilling.fullName || "Valued Customer"}</div>
+              <div>${safeBilling.address || ""}</div>
+              <div>${safeBilling.city || ""}, ${safeBilling.state || ""} - ${safeBilling.zip || ""}</div>
+              <div>Phone: ${safeBilling.phone || ""}</div>
             </div>
             <div style="flex: 1;">
               <h4 style="margin: 0 0 10px; color: #888; font-size: 12px; text-transform: uppercase;">Shipped To</h4>
-              <div style="font-weight: bold;">${shippingAddress.fullName}</div>
-              <div>${shippingAddress.address}</div>
-              <div>${shippingAddress.city}, ${shippingAddress.state} - ${shippingAddress.zip}</div>
+              <div style="font-weight: bold;">${safeShipping.fullName || (safeBilling.fullName || "Valued Customer")}</div>
+              <div>${safeShipping.address || (safeBilling.address || "")}</div>
+              <div>${safeShipping.city || (safeBilling.city || "")}, ${safeShipping.state || (safeBilling.state || "")} - ${safeShipping.zip || (safeBilling.zip || "")}</div>
             </div>
           </div>
           <table class="table">
@@ -214,10 +220,10 @@ function generateInvoiceHTML(order) {
             <tbody>${itemsHtml}</tbody>
           </table>
           <div class="totals">
-            <div class="total-row"><span>Subtotal</span><span>₹${amounts.subtotal.toLocaleString()}</span></div>
-            ${amounts.discount > 0 ? `<div class="total-row" style="color: #d32f2f;"><span>Discount</span><span>-₹${amounts.discount.toLocaleString()}</span></div>` : ''}
-            <div class="total-row"><span>GST (Tax)</span><span>₹${amounts.tax.toLocaleString()}</span></div>
-            <div class="total-row grand-total"><span>Grand Total</span><span>₹${amounts.total.toLocaleString()}</span></div>
+            <div class="total-row"><span>Subtotal</span><span>₹${(safeAmounts.subtotal || 0).toLocaleString()}</span></div>
+            ${(safeAmounts.discount || 0) > 0 ? `<div class="total-row" style="color: #d32f2f;"><span>Discount</span><span>-₹${safeAmounts.discount.toLocaleString()}</span></div>` : ''}
+            <div class="total-row"><span>GST (Tax)</span><span>₹${(safeAmounts.tax || 0).toLocaleString()}</span></div>
+            <div class="total-row grand-total"><span>Grand Total</span><span>₹${(safeAmounts.total || 0).toLocaleString()}</span></div>
           </div>
         </div>
         <div class="footer">
