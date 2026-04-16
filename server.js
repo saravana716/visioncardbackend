@@ -4,9 +4,13 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const paymentRoutes = require("./routes/payment");
+const emailRoutes = require("./routes/email");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
+
+// So req.protocol / URLs are correct behind a reverse proxy (optional)
+app.set("trust proxy", 1);
 
 // Step 0: CORS — browsers on another port (or opening file://) can call this API. Set CORS_ORIGIN in production.
 const corsOrigins = (process.env.CORS_ORIGIN || "")
@@ -29,6 +33,7 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Step 3: mount payment APIs under /
 app.use(paymentRoutes);
+app.use(emailRoutes);
 
 // Step 3b: test checkout page (same origin as API — avoids file:// fetch issues)
 app.use(express.static(path.join(__dirname, "sample")));

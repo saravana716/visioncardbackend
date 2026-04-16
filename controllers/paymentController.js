@@ -284,6 +284,30 @@ async function paymentResponse(req, res, next) {
           },
         });
         console.log("Firestore update complete.");
+
+        // Step E2 — Trigger Invoice Email if success
+        if (isSuccess) {
+          try {
+            console.log(`Fetching full order ${order_id} for invoice delivery...`);
+            const orderDoc = await db.collection("orders").doc(order_id).get();
+            if (orderDoc.exists) {
+              const orderData = { id: order_id, ...orderDoc.data() };
+              const { sendMail, generateInvoiceHTML } = require("../utils/mail");
+              const html = generateInvoiceHTML(orderData);
+              
+              // Send email asynchronously
+              sendMail({
+                to: orderData.billingAddress.email,
+                subject: `Order Confirmed - #${order_id} | Vision Kart`,
+                html: html
+              }).catch(e => 
+                console.error(`[Email] Async delivery failed for ${order_id}:`, e.message)
+              );
+            }
+          } catch (emailTriggerError) {
+            console.error("[Email] Trigger error:", emailTriggerError.message);
+          }
+        }
       } catch (fsError) {
         console.error("Firestore sync error in paymentResponse:", fsError.message);
         // We continue to redirect even if Firestore update fails locally (S2S handles this differently)
