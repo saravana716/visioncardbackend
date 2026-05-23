@@ -285,53 +285,8 @@ async function paymentResponse(req, res, next) {
         });
         console.log("Firestore update complete.");
 
-        // Step E2 — Trigger Invoice Email if success (with retry to wait for invoice generation)
-        if (isSuccess) {
-          // We run this in the background (no 'await') so the user isn't stuck waiting
-          (async () => {
-            const MAX_ATTEMPTS = 4;
-            const DELAY_MS = 5000; // 5 seconds between checks
-            
-            console.log(`[Email] Queueing invoice delivery for ${order_id}. Waiting for PDF...`);
-
-            try {
-              let orderData = null;
-              for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                // Wait first to give the PDF generator time
-                await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-                
-                const orderDoc = await db.collection("orders").doc(order_id).get();
-                if (orderDoc.exists) {
-                  orderData = { id: order_id, ...orderDoc.data() };
-                  if (orderData.invoiceUrl) {
-                    console.log(`[Email] Found invoice link for ${order_id} on attempt ${attempt}.`);
-                    break;
-                  }
-                }
-                console.log(`[Email] Invoice link not ready for ${order_id} (Attempt ${attempt}/${MAX_ATTEMPTS})...`);
-              }
-
-              if (!orderData) return;
-
-              const { sendMail, generateOrderConfirmationHTML } = require("../utils/mail");
-              const html = generateOrderConfirmationHTML(orderData);
-              
-              // Final confirmation log before sending
-              if (!orderData.invoiceUrl) {
-                console.warn(`[Email] WARNING: Sending email WITHOUT invoice link for ${order_id} after all attempts.`);
-              }
-
-              await sendMail({
-                to: orderData.billingAddress.email,
-                subject: `Order Confirmed - #${order_id} | Vision Kart`,
-                html: html
-              });
-              console.log(`[Email] Success: Sent premium confirmation for ${order_id}.`);
-            } catch (asyncError) {
-              console.error(`[Email] Background delivery failed for ${order_id}:`, asyncError.message);
-            }
-          })();
-        }
+        // Note: The Email sending logic has been moved to utils/orderListener.js
+        // The orderListener automatically detects the status change to 'Ordered' and sends the email.
       } catch (fsError) {
         console.error("Firestore sync error in paymentResponse:", fsError.message);
         // We continue to redirect even if Firestore update fails locally (S2S handles this differently)

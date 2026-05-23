@@ -6,6 +6,7 @@ const cors = require("cors");
 const paymentRoutes = require("./routes/payment");
 const emailRoutes = require("./routes/email");
 const { errorHandler } = require("./middleware/errorHandler");
+const { startOrderListener } = require("./utils/orderListener");
 
 const app = express();
 
@@ -50,6 +51,9 @@ const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => {
   console.log(`CCAvenue backend listening on http://localhost:${port}`);
   console.log(`Test checkout page: http://localhost:${port}/ccavenue-auto-submit.html`);
+  
+  // Start listening to the database for order confirmations to send emails
+  startOrderListener();
 });
 
 server.on("error", (err) => {
