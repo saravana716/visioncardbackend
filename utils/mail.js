@@ -68,22 +68,9 @@ function getSmtpPublicSummary() {
 }
 
 function createSmtpTransport() {
-  const { host, port, user, pass } = getSmtpSettings();
-  if (!user || !pass) {
-    return null;
-  }
-  const secure = port === 465;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-    // Brevo / port 587: STARTTLS (requireTLS avoids plain-text auth before upgrade)
-    requireTLS: !secure,
-    tls: { minVersion: "TLSv1.2" },
-    // Force IPv4 to prevent ENETUNREACH errors on Render
-    family: 4
-  });
+  // We no longer use nodemailer because Render blocks all SMTP ports (25, 465, 587).
+  // We strictly use the Brevo HTTP REST API via fetch.
+  return null;
 }
 
 function getDefaultFrom() {
@@ -95,42 +82,70 @@ function getDefaultFrom() {
 }
 
 /**
- * Send one email using env SMTP.
+ * Send one email using Brevo HTTP API to bypass Render firewall.
  * @param {{ to: string | string[], subject: string, text?: string, html?: string, replyTo?: string }} opts
  */
 async function sendMail(opts) {
-  const transport = createSmtpTransport();
-  if (!transport) {
+  const { pass } = getSmtpSettings();
+  if (!pass || !pass.startsWith("xkeysib-")) {
     const err = new Error(
-      "Mail is not configured: set SMTP user + SMTP password in .env (see missingEnvVars in response)."
+      "Mail is not configured: set a valid Brevo API key (starts with xkeysib-) in SMTP_PASS in .env"
     );
     err.code = "MAIL_NOT_CONFIGURED";
     err.details = getSmtpSetupHints();
     throw err;
   }
 
-  const from = getDefaultFrom();
-  if (!from) {
-    const err = new Error("MAIL_FROM is not set (use a verified sender in your provider)");
-    err.code = "MAIL_FROM_MISSING";
-    throw err;
-  }
-
+  const from = getDefaultFrom() || "visionkart.onlinestore@gmail.com";
   const { to, subject, text, html, replyTo } = opts;
+
   if (!text && !html) {
     const err = new Error("Provide text and/or html body");
     err.code = "MAIL_BODY_MISSING";
     throw err;
   }
 
-  return transport.sendMail({
-    from,
-    to: Array.isArray(to) ? to.join(", ") : to,
-    subject,
-    text,
-    html,
-    replyTo,
+  // Parse "Name <email>" format if present
+  let senderName = "VisionKart";
+  let senderEmail = from;
+  if (from.includes("<")) {
+    const match = from.match(/"?([^"]*)"?\s*<([^>]+)>/);
+    if (match) {
+      senderName = match[1].trim();
+      senderEmail = match[2].trim();
+    }
+  }
+
+  const toArray = Array.isArray(to) ? to : to.split(",").map(e => e.trim());
+  const toObjects = toArray.map(email => ({ email }));
+
+  const payload = {
+    sender: { name: senderName, email: senderEmail },
+    to: toObjects,
+    subject: subject,
+  };
+  
+  if (html) payload.htmlContent = html;
+  if (text) payload.textContent = text;
+  if (replyTo) payload.replyTo = { email: replyTo };
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": pass,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify(payload)
   });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("[Brevo API Error]", errText);
+    throw new Error(`Brevo API Error: ${response.status} ${response.statusText} - ${errText}`);
+  }
+
+  return response.json();
 }
 
 /**
