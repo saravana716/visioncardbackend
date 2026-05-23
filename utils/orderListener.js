@@ -11,11 +11,10 @@ function startOrderListener() {
     .where("status", "in", ["Ordered", "Processing"])
     .onSnapshot(
       (snapshot) => {
-        // Skip the very first snapshot which contains all existing historical orders
+        const initialLoadFlag = isInitialLoad;
         if (isInitialLoad) {
           isInitialLoad = false;
-          console.log(`[EmailListener] Initial load skipped. Actively listening for new order confirmations...`);
-          return;
+          console.log(`[EmailListener] Initial load. Actively checking for recently placed orders...`);
         }
 
         snapshot.docChanges().forEach(async (change) => {
@@ -23,6 +22,15 @@ function startOrderListener() {
           if (change.type === "added" || change.type === "modified") {
             const orderData = change.doc.data();
             const orderId = change.doc.id;
+            
+            // If the server just woke up (initial load), skip old historical orders (> 30 mins old)
+            // to prevent spamming past customers, while still catching fresh orders that caused the wake-up.
+            if (initialLoadFlag) {
+               const orderTime = orderData.updatedAt?.toMillis?.() || orderData.createdAt?.toMillis?.() || 0;
+               if (Date.now() - orderTime > 30 * 60 * 1000) {
+                  return; // Skip old orders on initial load
+               }
+            }
 
             // Only send the email if it hasn't already been sent
             if (!orderData.confirmationEmailSent && orderData.billingAddress && orderData.billingAddress.email) {
