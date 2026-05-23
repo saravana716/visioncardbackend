@@ -81,6 +81,8 @@ function createSmtpTransport() {
     // Brevo / port 587: STARTTLS (requireTLS avoids plain-text auth before upgrade)
     requireTLS: !secure,
     tls: { minVersion: "TLSv1.2" },
+    // Force IPv4 to prevent ENETUNREACH errors on Render
+    family: 4
   });
 }
 
