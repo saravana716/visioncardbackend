@@ -40,8 +40,8 @@ function startOrderListener() {
               
               console.log(`[EmailListener] Detected confirmation for order ${orderId}. Checking for invoice...`);
               
-              // Wait for invoice URL to be generated (max 4 attempts, 5 seconds each)
-              const MAX_ATTEMPTS = 4;
+              // Wait for invoice URL to be generated (max 12 attempts, 5 seconds each, total 60s)
+              const MAX_ATTEMPTS = 12;
               const DELAY_MS = 5000;
               let finalOrderData = { id: orderId, ...orderData };
               
