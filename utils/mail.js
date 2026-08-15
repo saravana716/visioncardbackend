@@ -96,7 +96,17 @@ async function sendMail(opts) {
     throw err;
   }
 
-  const from = getDefaultFrom() || "visionkart.onlinestore@gmail.com";
+  // No silent fallback sender: Brevo rejects mail from an unverified address,
+  // so a missing MAIL_FROM must fail loudly (the API maps this to 503 and the
+  // order listener's retry keeps the email pending) instead of every send
+  // dying against an unverified gmail address.
+  const from = getDefaultFrom();
+  if (!from) {
+    const err = new Error("Mail is not configured: set MAIL_FROM to a Brevo-verified sender address");
+    err.code = "MAIL_FROM_MISSING";
+    err.details = getSmtpSetupHints();
+    throw err;
+  }
   const { to, subject, text, html, replyTo } = opts;
 
   if (!text && !html) {
@@ -136,7 +146,9 @@ async function sendMail(opts) {
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    // A hung Brevo call must not stall the order listener indefinitely.
+    signal: AbortSignal.timeout(20000)
   });
 
   if (!response.ok) {
@@ -151,17 +163,31 @@ async function sendMail(opts) {
 /**
  * Generates a premium Order Confirmation email with a Download link
  */
+// Order data (names, product titles) is customer/admin input — escape it
+// before interpolating into email HTML so a crafted value can't inject markup.
+function escapeHtml(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function generateOrderConfirmationHTML(order) {
   const { items, billingAddress, amounts, id, invoiceUrl } = order;
   
   // Safe defaults
-  const firstName = billingAddress?.fullName?.split(' ')[0] || "there";
-  const totalAmount = amounts?.total || order.totalAmount || 0;
+  const firstName = escapeHtml(billingAddress?.fullName?.split(' ')[0] || "there");
+  // Numeric on purpose: toLocaleString() formats numbers (1,234) but returns
+  // strings unchanged, and a number needs no HTML escaping.
+  const totalAmount = Number(amounts?.total || order.totalAmount || 0);
   const safeItems = items && Array.isArray(items) ? items : [];
+  const safeInvoiceUrl = /^https:\/\//.test(String(invoiceUrl || "")) ? escapeHtml(invoiceUrl) : "";
   
   // Create a simple list of items
   const itemsText = safeItems.map(item => 
-    `${item.productName || item.name || 'Product'} (x${item.quantity || 1})`
+    escapeHtml(`${item.productName || item.name || 'Product'} (x${item.quantity || 1})`)
   ).join(', ');
 
   return `
@@ -194,7 +220,7 @@ function generateOrderConfirmationHTML(order) {
             
             <div class="order-box">
               <div style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Order ID</div>
-              <div style="font-weight: bold; font-size: 18px; margin-bottom: 15px;">#${id}</div>
+              <div style="font-weight: bold; font-size: 18px; margin-bottom: 15px;">#${escapeHtml(id)}</div>
               
               <div style="color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">Items</div>
               <div style="margin-bottom: 15px;">${itemsText}</div>
@@ -203,13 +229,15 @@ function generateOrderConfirmationHTML(order) {
               <div class="total">₹${totalAmount.toLocaleString()}</div>
             </div>
 
+            ${safeInvoiceUrl ? `
             <p style="margin-top: 30px;">Your tax invoice is ready for download.</p>
-            <a href="${invoiceUrl || '#'}" class="btn">Download Tax Invoice (PDF)</a>
+            <a href="${safeInvoiceUrl}" class="btn">Download Tax Invoice (PDF)</a>
             
             <p style="font-size: 13px; color: #999; margin-top: 30px;">
               If the button doesn't work, copy this link into your browser:<br>
-              <span style="color: #007bff; word-break: break-all;">${invoiceUrl || 'Link not available'}</span>
-            </p>
+              <span style="color: #007bff; word-break: break-all;">${safeInvoiceUrl}</span>
+            </p>` : `
+            <p style="margin-top: 30px;">Your tax invoice will be available from the My Orders page shortly.</p>`}
           </div>
           <div class="footer">
             <p>Questions? Contact us at visionkart.onlinestore@gmail.com</p>

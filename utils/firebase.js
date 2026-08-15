@@ -30,7 +30,16 @@ try {
     throw new Error("No service account credentials found (env or file).");
   }
 } catch (error) {
-  console.error("Firebase initialization error:", error);
+  // Fail fast with a clear message. Swallowing this error just deferred the
+  // crash to the admin.firestore() call below, which throws a misleading
+  // "default Firebase app does not exist" — every payment/email operation
+  // would fail anyway, so refuse to boot instead.
+  console.error(
+    "FATAL: Firebase Admin SDK could not be initialized. " +
+      "Set FIREBASE_SERVICE_ACCOUNT (JSON) or provide the service-account file.",
+    error.message || error
+  );
+  process.exit(1);
 }
 
 const db = admin.firestore();

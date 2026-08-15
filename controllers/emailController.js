@@ -37,6 +37,18 @@ function getSmtpInfo(req, res) {
  */
 async function postSend(req, res, next) {
   try {
+    // This endpoint can send arbitrary email through the SMTP account, so it is
+    // gated by a shared secret. Order-confirmation emails are sent internally by
+    // utils/orderListener.js (not via HTTP), so locking this does not affect the
+    // storefront. Fails closed when EMAIL_API_KEY is unset.
+    const requiredKey = process.env.EMAIL_API_KEY;
+    if (!requiredKey) {
+      return res.status(503).json({ error: "DISABLED", message: "Email API is disabled. Set EMAIL_API_KEY to enable." });
+    }
+    if (req.get("x-api-key") !== requiredKey) {
+      return res.status(401).json({ error: "UNAUTHORIZED", message: "Invalid or missing x-api-key." });
+    }
+
     const { to, subject, text, html, replyTo } = req.body || {};
 
     if (!to || !subject) {

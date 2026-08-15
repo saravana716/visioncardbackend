@@ -46,7 +46,13 @@ function decrypt(encText, workingKey) {
 }
 
 /**
- * Parse CCAvenue-style query string into a plain object (values are strings; URL decoding applied).
+ * Parse CCAvenue-style key=value&key=value text into a plain object.
+ *
+ * The decrypted wire format is NOT URL-encoded: values must be taken verbatim.
+ * decodeURIComponent here would throw URIError on any '%' in a gateway value
+ * (e.g. status_message "3% surcharge applied"), turning a successful payment's
+ * callback into a 500 for the customer, and the old '+'→space replace silently
+ * corrupted legitimate '+' characters before they reached paymentInfo.
  * @param {string} raw - e.g. "order_id=1&amount=10.00"
  * @returns {Record<string, string>}
  */
@@ -59,7 +65,7 @@ function parseKeyValueString(raw) {
     const eq = pair.indexOf("=");
     const k = eq === -1 ? pair : pair.slice(0, eq);
     const v = eq === -1 ? "" : pair.slice(eq + 1);
-    if (k) params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " "));
+    if (k) params[k] = v;
   }
   return params;
 }
